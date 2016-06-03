@@ -6,41 +6,54 @@ use 5.10.0;
 
 use Moo::Role;
 
-use URI;
-use JSON;
-use LWP::UserAgent;
-use HTTP::Request;
 use Data::Dumper;
+use HTTP::Request;
+use JSON::XS;
+use LWP::UserAgent;
+use Regexp::Common qw( net );
+use Scalar::Util   qw( blessed );
 use Socket;
-use Regexp::Common qw /net/;
+use URI;
 use XML::LibXML::Simple;
+
 
 has _json => (
     is      => 'rw',
+    lazy    => 1,
     default => sub {
-        require JSON::XS;
         return JSON::XS->new->pretty(1)->canonical(1);
     },
     isa => sub {
-        die "Not a JSON object"
-            if eval { ref( $_[0] ) !~ /^JSON(:|$)/ || !$_[0]->can('decode') };
+        my $json = shift;
+        if (   ! blessed $json
+            || ! $json->isa('JSON::XS')
+            || ! $json->can('decode')
+        ) {
+            die "Not a JSON object"
+        }
     },
-    lazy => 1,
 );
 
 has debug => (
-    is => 'rw',
+    is      => 'rw',
     default => sub { $ENV{NET_HADOOP_YARN_DEBUG} || 0 },
-    isa => sub { die 'debug should be an integer' if $_[0] !~ /^[0-9]$/ },
-    lazy => 1,
+    isa     => sub { die 'debug should be an integer' if $_[0] !~ /^[0-9]$/ },
+    lazy    => 1,
 );
 
 has ua => (
     is      => 'rw',
-    default => sub { return LWP::UserAgent->new( env_proxy => 0, timeout => $_[0]->timeout ) },
+    default => sub {
+        return LWP::UserAgent->new(
+                    env_proxy => 0,
+                    timeout   => $_[0]->timeout,
+                );
+    },
     isa     => sub {
-        die "'ua' isn't a LWP::UserAgent"
-            if !eval { $_[0]->isa("LWP::UserAgent") };
+        my $ua = shift;
+        if ( ! blessed( $ua ) || ! $ua->isa("LWP::UserAgent") ) {
+            die "'ua' isn't a LWP::UserAgent";
+        }
     },
     lazy => 1,
 );
@@ -48,8 +61,12 @@ has ua => (
 has timeout => (
     is      => 'rw',
     default => sub {30},
-    isa     => sub { die "timeout must be an integer" if $_[0] !~ /^[0-9]+$/ || $_[0] <= 0 },
     lazy    => 1,
+    isa     => sub {
+        if ( $_[0] !~ /^[0-9]+$/ || $_[0] <= 0 ) {
+            die "timeout must be an integer"
+        }
+    },
 );
 
 has servers => (
@@ -70,8 +87,13 @@ sub _check_host {
 sub _check_servers {
     for my $server (@{+shift}) {
         my ($host, $port) = split /:/, $server, 2;
-        die "server $server bad host" if ! _check_host($host);
-        die "server $server bad port" if ($port !~ /^[0-9]+$/ || $port < 1 || $port > 65535);
+        if (   ! _check_host($host)
+            || $port !~ /^[0-9]+$/
+            || $port < 1
+            || $port > 65535
+        ) {
+            die "server $server bad host";
+        }
     }
     return 1;
 }
@@ -82,7 +104,7 @@ sub _mk_uri {
     my $uri = $server . "/ws/v1/" . $path;
     $uri =~ s#//+#/#g;
     $uri = URI->new("http://" . $uri);
-    if ($params) {
+    if ( $params ) {
         $uri->query_form($params);
     }
     return $uri;
@@ -103,19 +125,42 @@ sub _post {
 }
 
 sub _request {
-    my $self = shift;
-    my $maxtries = @{$self->servers};
+    my $self     = shift;
+    my @servers  = @{ $self->servers };
+    my $maxtries = @servers;
 
-    my ($eval_error, $ret);
+    my ($eval_error, $ret, $n);
 
-    TRY: for (1..$maxtries) {
+    # get a copy, don't mess with the global setting
+    #
+    my @banned_servers;
 
-        $ret = eval {
+    TRY: for ( 1 .. $maxtries ) {
+        my $redo;
+
+        $n++;
+
+        if ( ! @servers ) {
+            $eval_error = sprintf "No servers left in the queue. Banned servers: '%s'",
+                                    @banned_servers
+                                        ? join( q{', '}, @banned_servers)
+                                        : '[none]',
+                            ;
+            last TRY;
+        }
+
+        eval {
             $eval_error = undef;
             my ( $method, $path, $extra ) = @_;
 
-            my $uri = $self->_mk_uri( $self->servers()->[0], $path, $method eq 'GET' ? $extra->{params} : () );
+            my $uri = $self->_mk_uri(
+                            $servers[0],
+                            $path,
+                            $method eq 'GET' ? $extra->{params} : (),
+                        );
+
             print "====> $uri\n" if $self->debug;
+
             my $req = HTTP::Request->new( uc($method), $uri );
             $req->header( "Accept-Encoding", "gzip" );
             #$req->header( "Accept", "application/json" );
@@ -126,55 +171,89 @@ sub _request {
             if ( $response->code == 500 ) {
                 die "Bad request: $uri";
             }
-            my $content = $response->decoded_content;
             #print "$content\n" if $self->debug;
-            my $decode_error;
 
             # found out the json support is buggy at least in the scheduler
             # info (overwrites child queues instead of making a list), revert
             # to XML (see YARN-2336)
-            my $res = eval {
-                ( $content || '' ) =~ /^\s*</ or die "doesn't look like XML";
-                XMLin(
+            my $res;
+            eval {
+                my $content = $response->decoded_content
+                                || die 'No response from the server!';
+
+                if ( $content !~ m{ \A ( \s+ )? <[?]xml }xms ) {
+                    if ( $content =~ m{
+                        \QThis is standby RM. Redirecting to the current active RM\E
+                    }xms ) {
+                        push @banned_servers, shift @servers;
+                        $redo++;
+                        die "Hit the standby with $servers[0]";
+                    }
+                    die "Response doesn't look like XML: $content";
+                }
+
+                $res = XMLin(
                     $content,
+                    KeepRoot   => 0,
                     KeyAttr    => [],
-                    ForceArray => [qw(task job taskAttempt jobAttempt container app appAttempt counterGroup)],
-                    KeepRoot   => 0
-                );
-            }    # $self->_json->decode($content)
-                or do { $decode_error = $@ };
-            if ($decode_error) {
+                    ForceArray => [qw(
+                        app
+                        appAttempt
+                        container
+                        counterGroup
+                        job
+                        jobAttempt
+                        task
+                        taskAttempt
+                    )],
+                ) || die "Failed to parse XML!";
+                1;
+            } or do {
+                # $self->_json->decode($content)
+                my $decode_error = $@ || 'Zombie error';
 
                 # when redirected to the history server, a bug present in hadoop 2.5.1
                 # sends to an HTML page, ignoring the Accept-Type header
-                if ($response->redirects) {
-                    die "server response wasn't valid (possibly buggy redirect to HTML instead of JSON or XML)";
-                }
-                die "server response wasn't valid JSON or XML";
-            }
-            print Dumper $res if $self->debug;
-            if ( $response->is_success ) {
-                return $res; # get out of this eval
-            }
-            else {
-                die
-                    "$res->{RemoteException}{message} "
-                    . "($res->{RemoteException}{exception} in $res->{RemoteException}{javaClassName}) "
-                    . "for URI: $uri";
-            }
-        } or do {
+                my $msg = $response->redirects
+                            ? q{server response wasn't valid (possibly buggy redirect to HTML instead of JSON or XML)}
+                            : q{server response wasn't valid JSON or XML}
+                            ;
+                die "$msg - $uri ($n/$maxtries): $decode_error";
+            };
 
+            print Dumper $res if $self->debug;
+
+            if ( $response->is_success ) {
+                $ret = $res;
+                return 1;
+            }
+
+            my $e = $res->{RemoteException};
+
+            die sprintf "%s (%s in %s) for URI: %s",
+                            $e->{message},
+                            $e->{exception},
+                            $e->{javaClassName},
+                            $uri,
+            ;
+
+            1;
+        } or do {
             # store the error for later; will be displayed if this is the last
             # iteration. also use the next server in the list in case of retry,
             # or reset the list for the next call (we went a full circle)
-            $eval_error = $@;
-            push @{$self->servers}, shift @{$self->servers};
+            $eval_error = $@ || 'Zombie error';
+            redo TRY if $redo;
+            push @servers, shift @servers if @servers > 1;
         };
 
         last TRY if $ret;
     } # retry as many times as there are servers
 
-    die $eval_error if $eval_error; # still here? that's a fail!
+    if ( $eval_error ) {
+        die "Final error ($n/$maxtries): $eval_error";
+    }
+
     return $ret;
 }
 
