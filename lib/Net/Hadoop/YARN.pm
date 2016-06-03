@@ -11,3 +11,21 @@ use Net::Hadoop::YARN::ApplicationMaster;
 use Net::Hadoop::YARN::HistoryServer;
 
 1;
+
+__END__
+
+=pod
+
+=head1 NAME
+
+Net::Hadoop::YARN - Perl interface to the YARN APIs
+
+=head1 DESCRIPTION
+
+TODO
+
+=head1 SYNOPSIS
+
+TODO
+
+=cut
