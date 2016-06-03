@@ -159,7 +159,7 @@ sub _request {
                             $method eq 'GET' ? $extra->{params} : (),
                         );
 
-            print "====> $uri\n" if $self->debug;
+            print STDERR "====> $uri\n" if $self->debug;
 
             my $req = HTTP::Request->new( uc($method), $uri );
             $req->header( "Accept-Encoding", "gzip" );
@@ -171,11 +171,11 @@ sub _request {
             if ( $response->code == 500 ) {
                 die "Bad request: $uri";
             }
-            #print "$content\n" if $self->debug;
 
             # found out the json support is buggy at least in the scheduler
             # info (overwrites child queues instead of making a list), revert
             # to XML (see YARN-2336)
+
             my $res;
             eval {
                 my $content = $response->decoded_content
@@ -218,10 +218,11 @@ sub _request {
                             ? q{server response wasn't valid (possibly buggy redirect to HTML instead of JSON or XML)}
                             : q{server response wasn't valid JSON or XML}
                             ;
+
                 die "$msg - $uri ($n/$maxtries): $decode_error";
             };
 
-            print Dumper $res if $self->debug;
+            print STDERR Dumper $res if $self->debug;
 
             if ( $response->is_success ) {
                 $ret = $res;
@@ -231,9 +232,9 @@ sub _request {
             my $e = $res->{RemoteException};
 
             die sprintf "%s (%s in %s) for URI: %s",
-                            $e->{message},
-                            $e->{exception},
-                            $e->{javaClassName},
+                            $e->{message}       || $res->{message}       || '[unknown message]',
+                            $e->{exception}     || $res->{exception}     || '[unknown exception]',
+                            $e->{javaClassName} || $res->{javaClassName} || '[unknown javaClassName]',
                             $uri,
             ;
 
@@ -258,4 +259,6 @@ sub _request {
 }
 
 1;
+
+__END__
 

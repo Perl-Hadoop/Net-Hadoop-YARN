@@ -40,7 +40,6 @@ sub _mk_subs {
         no strict 'refs';
         *{ ( caller() )[0] . "::$key" } = sub {
             my $self       = shift;
-            #use Data::Dumper; print Dumper \@_;
             # check the list of params validates against the list of
             # placeholders gathered in the url split above
             my $params_idx = 0;
@@ -81,6 +80,12 @@ sub _mk_uri {
     }
     return $uri;
 }
+
+1;
+
+__END__
+
+=pod
 
 =head1 METHODS
 
@@ -186,6 +191,3 @@ appmaster:
     http://<proxy http address:port>/proxy/{appid}/ws/v1/mapreduce/jobs/{jobid}/tasks/{taskid}/attempts/{attemptid}/counters
 
 =cut
-
-1;
-

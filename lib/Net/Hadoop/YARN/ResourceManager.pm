@@ -246,3 +246,4 @@ Currently in alpha, not implemented in this class
 
 1;
 
+__END__

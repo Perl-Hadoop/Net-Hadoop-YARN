@@ -129,7 +129,6 @@ type of task, valid values are m or r.  m for map task or r for reduce task.
 
 sub tasks {
     my $self = shift;
-    #use Data::Dumper; print Dumper \@_;
     $self->_get_tasks(@_);
 }
 
@@ -139,4 +138,5 @@ sub taskattempt {
 }
 
 1;
+
 __END__

@@ -1,7 +1,5 @@
 package Net::Hadoop::YARN;
 
-# ABSTRACT: Communicate with Apache Hadoop NextGen MapReduce (YARN) 
-
 use strict;
 use warnings;
 use 5.10.0;
