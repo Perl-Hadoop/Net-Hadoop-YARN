@@ -18,7 +18,7 @@ __END__
 
 =head1 NAME
 
-Net::Hadoop::YARN - Perl interface to the YARN APIs
+Net::Hadoop::YARN - Communicate with Apache Hadoop NextGen MapReduce (YARN)
 
 =head1 DESCRIPTION
 
