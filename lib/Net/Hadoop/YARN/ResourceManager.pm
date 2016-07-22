@@ -33,7 +33,7 @@ sub active_rm {
     my $rv;
 
     foreach my $server ( @{ $self->servers } ) {
-        my $info = $self->info( $server );
+        my $info = $self->info({ server => $server });
         my $haState = $info->{haState} || next;
         if ( $haState eq 'ACTIVE' ) {
             $rv = $server;
@@ -55,13 +55,13 @@ sub active_rm {
 }
 
 sub info {
-    my $self   = shift;
-    my $server = shift;
+    my $self = shift;
+    my $opt  = is_hashref $_[0] ? shift @_ : {};
 
     my $res = $self->_get(
                     "cluster/info",
                     undef,
-                    ( $server or () ),
+                    ( $opt->{server} or () ),
                 );
 
     return $self->_apply_host_key(
@@ -78,7 +78,12 @@ Cluster Metrics API
 
 sub metrics {
     my $self = shift;
-    my $res = $self->_get("cluster/metrics");
+    my $opt  = is_hashref $_[0] ? shift @_ : {};
+    my $res = $self->_get(
+                    "cluster/metrics",
+                    undef,
+                    ( $opt->{server} or () ),
+                );
 
     return $self->_apply_host_key(
                 $res,
@@ -94,7 +99,7 @@ Cluster Scheduler API
 
 sub scheduler {
     my $self = shift;
-    my $res = $self->_get("cluster/scheduler");
+    my $res  = $self->_get("cluster/scheduler");
     return $self->_apply_host_key(
                 $res,
                 $res->{schedulerInfo} || $res,
