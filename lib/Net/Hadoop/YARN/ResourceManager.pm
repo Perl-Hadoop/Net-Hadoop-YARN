@@ -3,8 +3,17 @@ package Net::Hadoop::YARN::ResourceManager;
 use strict;
 use warnings;
 use 5.10.0;
-use Moo;
+
 use Data::Dumper;
+use Moo;
+use Ref::Util qw(
+    is_ref
+    is_arrayref
+    is_hashref
+);
+use Scalar::Util qw(
+    refaddr
+);
 
 with 'Net::Hadoop::YARN::Roles::Common';
 
@@ -21,7 +30,10 @@ Cluster Information API
 sub info {
     my $self = shift;
     my $res = $self->_get("cluster/info");
-    return $res->{clusterInfo} || $res;
+    return $self->_apply_host_key(
+                $res,
+                $res->{clusterInfo} || $res,
+            );
 }
 
 =head2 metrics
@@ -33,7 +45,11 @@ Cluster Metrics API
 sub metrics {
     my $self = shift;
     my $res = $self->_get("cluster/metrics");
-    return $res->{clusterMetrics} || $res;
+
+    return $self->_apply_host_key(
+                $res,
+                $res->{clusterMetrics} || $res,
+            );
 }
 
 =head2 scheduler
@@ -45,7 +61,10 @@ Cluster Scheduler API
 sub scheduler {
     my $self = shift;
     my $res = $self->_get("cluster/scheduler");
-    return $res->{schedulerInfo} || $res;
+    return $self->_apply_host_key(
+                $res,
+                $res->{schedulerInfo} || $res,
+            );
 }
 
 =pod
@@ -132,7 +151,11 @@ sub apps {
     my $res = $self->_get(
         $app_id ? "cluster/apps/$app_id" : ( "cluster/apps", { params => $options } )
     );
-    return $res->{apps}{app} || $res->{app} || $res;
+
+    return $self->_apply_host_key(
+                $res,
+                $res->{apps}{app} || $res->{app} || $res,
+            );
 }
 
 =head2 attempts
@@ -183,11 +206,20 @@ sub appstatistics {
     elsif ( @_ > 1 ) {
         $options = {@_};
     }
-    my $res
-        = $self->_get( "cluster/appstatistics", $options ? { params => $options } : () );
+    my $res = $self->_get(
+                    "cluster/appstatistics",
+                    ( $options ? {
+                        params => $options,
+                    } : () ),
+                );
+
     if ($res) {
-        return $res->{appStatInfo}{statItem} || $res->{statItem};
+        return $self->_apply_host_key(
+                    $res,
+                    $res->{appStatInfo}{statItem} || $res->{statItem},
+                );
     }
+
     return;
 }
 
@@ -222,8 +254,19 @@ sub nodes {
         $options = {@_};
     }
     my $res = $self->_get(
-        $node_id ? "cluster/nodes/$node_id" : ( "cluster/nodes", { params => $options } ) );
-    return $res->{nodes}{node} || $res->{node} || $res;
+                    $node_id ? "cluster/nodes/$node_id"
+                             :  (
+                                    "cluster/nodes",
+                                    { params => $options },
+                                )
+                );
+
+
+    return $self->_apply_host_key(
+                $res,
+                $res->{nodes}{node} || $res->{node} || $res,
+            );
+
 }
 
 =head2 Cluster Writeable APIs
@@ -243,6 +286,37 @@ Currently in alpha, not implemented in this class
 =back
 
 =cut
+
+sub _apply_host_key {
+    my $self = shift;
+    my $res  = shift;
+    my $rv   = shift;
+
+
+    if (   is_ref( $res )
+        && is_ref( $rv )
+        && ( refaddr $res eq refaddr $rv )
+    ) {
+        return $rv;
+    }
+
+    my $host_key  = $self->host_key;
+    my $this_host = $res->{ $host_key };
+
+    if ( is_hashref $rv ) {
+        $rv->{ $host_key } = $this_host;
+    }
+    elsif ( is_arrayref $rv ) {
+        foreach my $e ( @{ $rv } ) {
+            $e->{ $host_key } = $this_host;
+        }
+    }
+    else {
+        die "Got unknown data: $rv";
+    }
+
+    return $rv;
+}
 
 1;
 

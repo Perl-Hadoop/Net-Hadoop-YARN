@@ -16,7 +16,6 @@ use Socket;
 use URI;
 use XML::LibXML::Simple;
 
-
 has _json => (
     is      => 'rw',
     lazy    => 1,
@@ -77,6 +76,12 @@ has servers => (
     lazy => 1,
 );
 
+has host_key => (
+    is  => 'rw',
+    default => sub { '__RESTHost' },
+    lazy => 1,
+);
+
 sub _check_host {
     my $host = shift;
     return !!( eval { inet_aton($host) }
@@ -126,6 +131,7 @@ sub _post {
 
 sub _request {
     my $self     = shift;
+    my $host_key = $self->host_key;
     my @servers  = @{ $self->servers };
     my $maxtries = @servers;
 
@@ -134,6 +140,7 @@ sub _request {
     # get a copy, don't mess with the global setting
     #
     my @banned_servers;
+    my $selected_server;
 
     TRY: for ( 1 .. $maxtries ) {
         my $redo;
@@ -149,12 +156,13 @@ sub _request {
             last TRY;
         }
 
+        $selected_server = $servers[0];
         eval {
             $eval_error = undef;
             my ( $method, $path, $extra ) = @_;
 
             my $uri = $self->_mk_uri(
-                            $servers[0],
+                            $selected_server,
                             $path,
                             $method eq 'GET' ? $extra->{params} : (),
                         );
@@ -187,7 +195,7 @@ sub _request {
                     }xms ) {
                         push @banned_servers, shift @servers;
                         $redo++;
-                        die "Hit the standby with $servers[0]";
+                        die "Hit the standby with $selected_server";
                     }
                     die "Response doesn't look like XML: $content";
                 }
@@ -248,7 +256,12 @@ sub _request {
             push @servers, shift @servers if @servers > 1;
         };
 
-        last TRY if $ret;
+        if ( $ret ) {
+            # mark where we've been
+            $ret->{ $host_key } = $selected_server;
+            last TRY;
+        }
+
     } # retry as many times as there are servers
 
     if ( $eval_error ) {
