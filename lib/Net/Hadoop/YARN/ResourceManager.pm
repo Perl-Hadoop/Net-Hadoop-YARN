@@ -27,9 +27,43 @@ Cluster Information API
 
 =cut
 
-sub info {
+sub active_rm {
     my $self = shift;
-    my $res = $self->_get("cluster/info");
+    my $opt  = is_hashref $_[0] ? shift @_ : {};
+    my $rv;
+
+    foreach my $server ( @{ $self->servers } ) {
+        my $info = $self->info( $server );
+        my $haState = $info->{haState} || next;
+        if ( $haState eq 'ACTIVE' ) {
+            $rv = $server;
+            last;
+        }
+    }
+
+    if ( ! $rv ) {
+        die sprintf "Failed to locate the active YARN Resource Manager from these hosts: %s",
+                        join( q{, }, @{ $self->servers } ),
+        ;
+    }
+
+    if ( $opt->{hostname_only} ) {
+        return +( split m{[:]}xms, $rv )[0];
+    }
+
+    return $rv;
+}
+
+sub info {
+    my $self   = shift;
+    my $server = shift;
+
+    my $res = $self->_get(
+                    "cluster/info",
+                    undef,
+                    ( $server or () ),
+                );
+
     return $self->_apply_host_key(
                 $res,
                 $res->{clusterInfo} || $res,

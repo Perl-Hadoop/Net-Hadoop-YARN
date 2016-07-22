@@ -131,8 +131,10 @@ sub _post {
 
 sub _request {
     my $self     = shift;
+    my ( $method, $path, $extra, $server ) = @_;
+
     my $host_key = $self->host_key;
-    my @servers  = @{ $self->servers };
+    my @servers  = $server ? ( $server ) : @{ $self->servers };
     my $maxtries = @servers;
 
     my ($eval_error, $ret, $n);
@@ -159,7 +161,6 @@ sub _request {
         $selected_server = $servers[0];
         eval {
             $eval_error = undef;
-            my ( $method, $path, $extra ) = @_;
 
             my $uri = $self->_mk_uri(
                             $selected_server,

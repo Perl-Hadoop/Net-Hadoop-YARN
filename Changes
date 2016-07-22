@@ -2,6 +2,7 @@ Revision history for Net-Hadoop-YARN
 
 0.100    2016-07-22
 	Collect and return the targeted REST host in the stats.
+	New method active_rm() to locate the active Resource Manager in HA-pairs
 
 0.004    2016-06-06
          Minor fixes.
