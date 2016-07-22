@@ -13,7 +13,7 @@ SKIP: {
 
     my $hist;
     isa_ok( $hist = Net::Hadoop::YARN::HistoryServer->new(
-                servers => [ $ENV{YARN_HISTORY_SERVER} ]
+                servers => [ split /,/, $ENV{YARN_HISTORY_SERVER} ]
             ),
             "Net::Hadoop::YARN::HistoryServer"
     );
