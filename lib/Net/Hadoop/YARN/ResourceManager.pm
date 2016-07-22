@@ -19,6 +19,8 @@ with 'Net::Hadoop::YARN::Roles::Common';
 
 has '+servers' => ( default => sub { ["localhost:8088"] }, );
 
+has '+add_host_key' => ( default => sub { 1 } );
+
 =head1 METHODS
 
 =head2 info

@@ -76,6 +76,12 @@ has servers => (
     lazy => 1,
 );
 
+has add_host_key => (
+    is      => 'rw',
+    default => sub { 0 },
+    lazy    => 1,
+);
+
 has host_key => (
     is  => 'rw',
     default => sub { '__RESTHost' },
@@ -95,9 +101,9 @@ sub _check_servers {
         if (   ! _check_host($host)
             || $port !~ /^[0-9]+$/
             || $port < 1
-            || $port > 65535
+            || $port > 19888
         ) {
-            die "server $server bad host";
+            die "server $server bad host (port=$port)";
         }
     }
     return 1;
@@ -258,8 +264,10 @@ sub _request {
         };
 
         if ( $ret ) {
-            # mark where we've been
-            $ret->{ $host_key } = $selected_server;
+            if ( $self->add_host_key ) {
+                # mark where we've been
+                $ret->{ $host_key } = $selected_server;
+            }
             last TRY;
         }
 
