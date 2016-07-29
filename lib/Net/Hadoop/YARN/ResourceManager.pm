@@ -21,11 +21,26 @@ has '+servers' => ( default => sub { ["localhost:8088"] }, );
 
 has '+add_host_key' => ( default => sub { 1 } );
 
+=head1 DESCRIPTION
+
+Perl interface to the YARN Resource Manager REST API.
+
+=head1 SYNOPSIS
+
+    my $rm = Net::Hadoop::YARN::ResourceManager->new;
+
 =head1 METHODS
 
-=head2 info
+=cut
 
-Cluster Information API
+=head2 active_rm
+
+Returns the active RM hostname in the HA-pair.
+
+    my $host_port = $rm->active_rm;
+    my $host      = $rm->active_rm({ hostname_only => 1 });
+
+This function is an extension in the module and not a part of the REST API.
 
 =cut
 
@@ -55,6 +70,12 @@ sub active_rm {
 
     return $rv;
 }
+
+=head2 info
+
+Cluster Information API
+
+=cut
 
 sub info {
     my $self = shift;
@@ -325,6 +346,10 @@ Currently in alpha, not implemented in this class
 =item Cluster Delegation Tokens API
 
 =back
+
+=head1 SEE ALSO
+
+L<https://hadoop.apache.org/docs/stable/hadoop-yarn/hadoop-yarn-site/ResourceManagerRest.html>.
 
 =cut
 
