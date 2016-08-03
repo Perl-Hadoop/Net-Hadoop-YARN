@@ -15,9 +15,25 @@ SKIP: {
     my $rm
         = Net::Hadoop::YARN::ResourceManager->new( servers => [ split /,/, $ENV{YARN_RESOURCE_MANAGER} ] );
 
-    #    print Dumper $rm->apps( { limit => 1, states => "RUNNING" } );
+    my $sample_apps = $rm->apps( { limit => 100, states => "RUNNING" } );
 
-    my ($app) = @{ $rm->apps( { limit => 1, states => "RUNNING" } ) };
+    fail("No running applications in $ENV{YARN_RESOURCE_MANAGER}!") if ! @{ $sample_apps };
+
+    # Just ignore sparkies until we have a workaround or solution.
+    #
+    my $sparky;
+    my ($app) = map { ($_->{applicationType} || '') eq 'SPARK' ? do { $sparky++; () } : $_ } @{ $sample_apps };
+
+    note( sprintf "Collected %s spark apps and ignoring all of them.", $sparky || 'none');
+
+    my $type = $app ? $app->{applicationType} || '' : '';
+
+    if ( ! $app || $type eq 'SPARK' ) {
+        # A relevant discussion:
+        # http://stackoverflow.com/questions/30070276/json-not-returned-from-yarn-rest-api
+        todo_skip("Spark applications do not return valida data. Skipping");
+    }
+
     my $app_id = $app->{id};
     my $am;
     isa_ok(
