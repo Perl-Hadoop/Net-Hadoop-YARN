@@ -32,15 +32,14 @@ Applications API & Application API
 
 parameters are either a hash(/ref) or an application ID
 
-=item state
+=head2 state
 
 application state 
 
-=item user
+=head2 user
 
 user name
 
-=back
 =cut
 
 sub app {
