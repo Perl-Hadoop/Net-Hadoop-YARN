@@ -10,10 +10,10 @@ use POSIX          ();
 use Ref::Util      ();
 use Scalar::Util   ();
 use Time::Duration ();
+use Net::Hadoop::YARN::ResourceManager;
 
 has rm_object => (
     is       => 'rw',
-    required => 1,2
     isa      => sub {
         my $thing = shift;
         my $type  = 'Net::Hadoop::YARN::ResourceManager';
@@ -23,6 +23,13 @@ has rm_object => (
         ) {
             die "rm_object is not a $type";
         }
+    },
+    default => sub {
+        Net::Hadoop::YARN::ResourceManager->new(
+            ( $ENV{YARN_RESOURCE_MANAGER} ? (
+                servers => [ split /,/, $ENV{YARN_RESOURCE_MANAGER} ]
+            ) : () )
+        );
     },
 );
 
@@ -206,16 +213,44 @@ __END__
 
 =head1 NAME
 
+Net::Hadoop::YARN::ResourceManager::Scheduler::UserApps - User application stats in the Resource Manager
+
 =head1 DESCRIPTION
+
+User application stats in the Resource Manager.
 
 =head1 SYNOPSIS
 
-=head1 AUTHOR
+    use Net::Hadoop::YARN::ResourceManager::Scheduler::UserApps;
+    my $uapps = Net::Hadoop::YARN::ResourceManager::Scheduler::UserApps->new(%opt);
+    my $stats = $uapps->collect( $user_name );
 
-Burak Gursoy C<<burakE<64>cpan.org>>
+=head1 METHODS
+
+=head1 new
+
+Available options:
+
+=over 4
+
+=item rm_object
+
+The default C<rm_object> (resouce manager) can be overridden with this option.
+The object needs to be a subclass of C<Net::Hadoop::YARN::ResourceManager>.
+
+=back
+
+=head1 collect
+
+This method only accepts a user name parameter and it will return back
+the statistics for that user's applications.
 
 =head1 SEE ALSO
 
 L<Net::Hadoop::YARN::ResourceManager>.
+
+=head1 AUTHOR
+
+Burak Gursoy C<<burakE<64>cpan.org>>
 
 =cut
