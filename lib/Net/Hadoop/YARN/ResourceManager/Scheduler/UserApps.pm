@@ -1,4 +1,5 @@
 package Net::Hadoop::YARN::ResourceManager::Scheduler::UserApps;
+
 use 5.10.0;
 use strict;
 use warnings;
