@@ -2,6 +2,7 @@ Revision history for Net-Hadoop-YARN
 
 {{$NEXT}}
     - Document active_rm()
+    - JMX helpers + Ueer apps interface for RM.
 
 0.100 2016-07-22 BURAK
     - Collect and return the targeted REST host in the stats.
