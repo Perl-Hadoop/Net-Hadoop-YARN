@@ -123,7 +123,7 @@ appmaster:
 history:
     http://<history server http address:port>/ws/v1/history/mapreduce/jobs/{jobid}
 
-http://<proxy http address:port>/proxy/application_1326232085508_0004/ws/v1/mapreduce/jobs/{jobid}y
+http://<proxy http address:port>/proxy/application_1326232085508_0004/ws/v1/mapreduce/jobs/{jobid}
 
 =head2 Job Attempts API
 
