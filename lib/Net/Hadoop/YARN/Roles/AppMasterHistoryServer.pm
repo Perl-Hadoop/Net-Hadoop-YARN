@@ -31,8 +31,13 @@ sub _mk_subs {
         # regexes to find them
         my @param_names = $methods_urls->{$key}[0] =~ m/\{([a-z]+)\}/g;
         my @validations = map {
-            do { my $name = $_; sub { shift =~ /^$validation_pattern{$name}$/ } }
+            my $name = $_;
+            {
+                name     => $name,
+                validate => sub { shift =~ /^$validation_pattern{$name}$/ },
+            };
         } @param_names;
+
         my $url       = $methods_urls->{$key}[0];
         my $json_path = $methods_urls->{$key}[1];
 
@@ -43,9 +48,15 @@ sub _mk_subs {
             # check the list of params validates against the list of
             # placeholders gathered in the url split above
             my $params_idx = 0;
-            for (@_) {
-                die "Param $_ doesn't satisfy pattern $validations[$params_idx] in call to $key"
-                    if !ref && !$validations[$params_idx]->($_);
+            for my $param ( @_ ) {
+                my $v = $validations[ $params_idx ];
+                if ( ! ref $param && ! $v->{validate}->( $param ) ) {
+                    die sprintf "Param `%s` doesn't satisfy pattern /%s/ in call to `%s`.",
+                                    $param,
+                                    $validation_pattern{  $v->{name}  },
+                                    $key,
+                    ;
+                }
                 $params_idx++;
             }
 
