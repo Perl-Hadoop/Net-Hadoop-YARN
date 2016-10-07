@@ -34,7 +34,10 @@ sub _mk_subs {
             my $name = $_;
             {
                 name     => $name,
-                validate => sub { shift =~ /^$validation_pattern{$name}$/ },
+                validate => sub {
+                    my $val = shift || return;
+                    $val =~ /^$validation_pattern{$name}$/
+                },
             };
         } @param_names;
 
