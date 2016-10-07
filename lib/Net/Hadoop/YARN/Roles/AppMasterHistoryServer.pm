@@ -44,15 +44,34 @@ sub _mk_subs {
         my $url       = $methods_urls->{$key}[0];
         my $json_path = $methods_urls->{$key}[1];
 
-        # insert the method for the endpoint in the using class
-        no strict 'refs';
-        *{ ( caller() )[0] . "::$key" } = sub {
+        my $new_method = sub {
             my $self       = shift;
             # check the list of params validates against the list of
             # placeholders gathered in the url split above
             my $params_idx = 0;
+
             for my $param ( @_ ) {
-                my $v = $validations[ $params_idx ];
+                my $v = $validations[ $params_idx ]
+                            || do {
+                                my $what = $key =~ m{ \A _ }xms
+                                         ? do {
+                                                if ( my $who = (caller 1)[3] ) {
+                                                    my($short) = (split m{ [:]{2} }xms, $who)[-1];
+                                                    sprintf qq{%s` via: `%s}, $short, $who;
+                                                }
+                                                else {
+                                                    $key;
+                                                }
+                                            }
+                                         : $key
+                                         ;
+                                die sprintf "No validator for `%s` [%s]. Be sure that `%s` is a valid API endpoint for this object",
+                                                    $param,
+                                                    $params_idx,
+                                                    $what,
+                                    ;
+                                };
+
                 if ( ! ref $param && ! $v->{validate}->( $param ) ) {
                     die sprintf "Param `%s` doesn't satisfy pattern /%s/ in call to `%s`.",
                                     $param || '',
@@ -80,6 +99,12 @@ sub _mk_subs {
             # Only return the JSON fragment we need
             return Hash::Path->get($res, split(/\./, $json_path));
         };
+        {
+            # limit the scope of non-strict-ness
+            # insert the method for the endpoint in the using class
+            no strict 'refs';
+            *{ ( caller() )[0] . "::$key" } = $new_method;
+        }
     }
 }
 
