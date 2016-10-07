@@ -55,7 +55,7 @@ sub _mk_subs {
                 my $v = $validations[ $params_idx ];
                 if ( ! ref $param && ! $v->{validate}->( $param ) ) {
                     die sprintf "Param `%s` doesn't satisfy pattern /%s/ in call to `%s`.",
-                                    $param,
+                                    $param || '',
                                     $validation_pattern{  $v->{name}  },
                                     $key,
                     ;
