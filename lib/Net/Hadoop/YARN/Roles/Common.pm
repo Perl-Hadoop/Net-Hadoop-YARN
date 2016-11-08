@@ -16,6 +16,12 @@ use Socket;
 use URI;
 use XML::LibXML::Simple;
 
+has no_http_redirect => (
+    is      => 'rw',
+    default => sub { 0 },
+    lazy    => 1,
+);
+
 has _json => (
     is      => 'rw',
     lazy    => 1,
@@ -46,6 +52,9 @@ has ua => (
         return LWP::UserAgent->new(
                     env_proxy => 0,
                     timeout   => $_[0]->timeout,
+                    ( $_[0]->no_http_redirect ? (
+                    max_redirect => 0,
+                    ):()),
                 );
     },
     isa     => sub {

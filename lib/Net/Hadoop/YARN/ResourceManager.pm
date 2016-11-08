@@ -17,9 +17,24 @@ use Scalar::Util qw(
 
 with 'Net::Hadoop::YARN::Roles::Common';
 
-has '+servers' => ( default => sub { ["localhost:8088"] }, );
+has '+servers' => (
+    default => sub { ["localhost:8088"] },
+);
 
 has '+add_host_key' => ( default => sub { 1 } );
+
+# After CDH 5.8.2, The RM properly issues a 302 redirect, but losing any query
+# string in the original request, thus making the filters and any other parameter
+# a no-op and returning huge responses including "everything" instead of a subset.
+#
+# eg: { queue: "root.whatever" } filter will be lost after the redirect.
+#
+# We can't use active_rm() in here or in the Common role, as it will trigger a
+# deep recursion due to the fact that the HTTP calls are shared from there.
+#
+# Possibly needs to be revisited again in the future.
+#
+has '+no_http_redirect' => ( default => sub { 1 } );
 
 =head1 DESCRIPTION
 
