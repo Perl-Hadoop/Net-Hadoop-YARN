@@ -36,6 +36,35 @@ has '+servers' => (
     default => sub { ["localhost:19888"] },    # same as resource manager by default
 );
 
+sub info {
+    my $self = shift;
+    my $res = $self->_get("info");
+    return $res->{info};
+}
+
+sub jobs {
+    my $self = shift;
+    $self->_get_jobs(@_);
+}
+
+sub tasks {
+    my $self = shift;
+    $self->_get_tasks(@_);
+}
+
+sub taskattempt {
+    my $self = shift;
+    my $attempt = $self->_get_taskattempt(@_);
+}
+
+1;
+
+__END__
+
+=pod
+
+=encoding utf8
+
 =head1 NAME
 
 Net::Hadoop::YARN::HistoryServer
@@ -56,13 +85,6 @@ History Server Info API
 
 http://<history server http address:port>/ws/v1/history/info
 
-=cut
-
-sub info {
-    my $self = shift;
-    my $res = $self->_get("info");
-    return $res->{info};
-}
 
 =head2 jobs
 
@@ -106,13 +128,6 @@ jobs with finish time ending with this time, specified in ms since epoch
 
 =back
 
-=cut
-
-sub jobs {
-    my $self = shift;
-    $self->_get_jobs(@_);
-}
-
 =head2 tasks
 
 Tasks API
@@ -125,18 +140,7 @@ type of task, valid values are m or r.  m for map task or r for reduce task.
 
 =back
 
+=head2 taskattempt
+
 =cut
 
-sub tasks {
-    my $self = shift;
-    $self->_get_tasks(@_);
-}
-
-sub taskattempt {
-    my $self = shift;
-    my $attempt = $self->_get_taskattempt(@_);
-}
-
-1;
-
-__END__

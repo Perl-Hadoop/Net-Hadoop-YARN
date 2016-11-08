@@ -108,3 +108,28 @@ sub startupProgress {
 1;
 
 __END__
+
+=pod
+
+=encoding utf8
+
+=head1 DESCRIPTION
+
+YARN NameNode JMX methods.
+
+=head1 SYNOPSIS
+
+    my $nn = Net::Hadoop::YARN::NameNode::JMX->new( %opt );
+
+=head1 METHODS
+
+=head2 active_namenode
+
+    my $active_host_port = $nn->active_namenode;
+    my $active_host      = $nn->active_namenode({ hostname_only => 1 });
+
+=head2 startupProgress
+
+    my $sup = $nn->startupProgress;
+
+=cut

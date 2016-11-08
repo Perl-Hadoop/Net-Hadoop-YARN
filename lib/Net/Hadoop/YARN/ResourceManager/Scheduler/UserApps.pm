@@ -227,7 +227,7 @@ User application stats in the Resource Manager.
 
 =head1 METHODS
 
-=head1 new
+=head2 new
 
 Available options:
 
@@ -240,10 +240,16 @@ The object needs to be a subclass of C<Net::Hadoop::YARN::ResourceManager>.
 
 =back
 
-=head1 collect
+=head2 collect
 
 This method only accepts a user name parameter and it will return back
 the statistics for that user's applications.
+
+=head2 format_bytes
+
+This will return the byte-size as a string representation in gigabytes with a
+simple division. You may want yo subclass to override if you need a more fine
+grained output.
 
 =head1 SEE ALSO
 

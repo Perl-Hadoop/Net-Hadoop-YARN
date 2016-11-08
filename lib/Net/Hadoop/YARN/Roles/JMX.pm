@@ -263,3 +263,23 @@ sub _looper {
 1;
 
 __END__
+
+=pod
+
+=encoding utf8
+
+=head1 DESCRIPTION
+
+JMX helpers for YARN endpoints.
+
+=head1 SYNOPSIS
+
+    -
+
+=head1 METHODS
+
+=head2 all_available_stats
+
+=head2 collect
+
+=cut

@@ -33,3 +33,23 @@ sub java_runtime {
 1;
 
 __END__
+
+=pod
+
+=encoding utf8
+
+=head1 DESCRIPTION
+
+YARN DataNode JMX methods.
+
+=head1 SYNOPSIS
+
+    my $dn = Net::Hadoop::YARN::DataNode::JMX->new( %opt );
+
+=head1 METHODS
+
+=head2 java_runtime
+
+    my $java = $dn->java_runtime;
+
+=cut

@@ -330,6 +330,8 @@ applications matching any of the given application tags, specified as a comma-se
 
 Cluster Application Attempts API : get attempts details on a specific task
 
+=head2 appattempts
+
 =head2 appstatistics
 
 Cluster Application Statistics API
