@@ -36,29 +36,6 @@ has '+add_host_key' => ( default => sub { 1 } );
 #
 has '+no_http_redirect' => ( default => sub { 1 } );
 
-=head1 DESCRIPTION
-
-Perl interface to the YARN Resource Manager REST API.
-
-=head1 SYNOPSIS
-
-    my $rm = Net::Hadoop::YARN::ResourceManager->new;
-
-=head1 METHODS
-
-=cut
-
-=head2 active_rm
-
-Returns the active RM hostname in the HA-pair.
-
-    my $host_port = $rm->active_rm;
-    my $host      = $rm->active_rm({ hostname_only => 1 });
-
-This function is an extension in the module and not a part of the REST API.
-
-=cut
-
 sub active_rm {
     my $self = shift;
     my $opt  = is_hashref $_[0] ? shift @_ : {};
@@ -86,12 +63,6 @@ sub active_rm {
     return $rv;
 }
 
-=head2 info
-
-Cluster Information API
-
-=cut
-
 sub info {
     my $self = shift;
     my $opt  = is_hashref $_[0] ? shift @_ : {};
@@ -108,12 +79,6 @@ sub info {
             );
 }
 
-=head2 metrics
-
-Cluster Metrics API
-
-=cut
-
 sub metrics {
     my $self = shift;
     my $opt  = is_hashref $_[0] ? shift @_ : {};
@@ -129,12 +94,6 @@ sub metrics {
             );
 }
 
-=head2 scheduler
-
-Cluster Scheduler API
-
-=cut
-
 sub scheduler {
     my $self = shift;
     my $res  = $self->_get("cluster/scheduler");
@@ -144,7 +103,166 @@ sub scheduler {
             );
 }
 
+sub apps {
+    my $self = shift;
+    my $app_id;
+    my $options;
+    if ( @_ == 1 ) {
+        if ( !ref $_[0] ) {
+            $app_id = shift;
+        }
+        else {
+            $options = shift;
+        }
+    }
+    elsif ( @_ > 1 ) {
+        $options = {@_};
+    }
+    my $res = $self->_get(
+        $app_id ? "cluster/apps/$app_id" : ( "cluster/apps", { params => $options } )
+    );
+
+    return $self->_apply_host_key(
+                $res,
+                $res->{apps}{app} || $res->{app} || $res,
+            );
+}
+
+sub appattempts {
+    my $self = shift;
+    my $app_id = shift or die "No app ID provided";
+    my $res = $self->_get( "cluster/apps/$app_id/appattempts" );
+    return $res;
+}
+
+# TODO check all states and add filter (validation)
+
+sub appstatistics {
+    my $self = shift;
+    my $options;
+    if ( @_ == 1 && ref $_[0] ) {
+        $options = shift;
+    }
+    elsif ( @_ > 1 ) {
+        $options = {@_};
+    }
+    my $res = $self->_get(
+                    "cluster/appstatistics",
+                    ( $options ? {
+                        params => $options,
+                    } : () ),
+                );
+
+    if ($res) {
+        return $self->_apply_host_key(
+                    $res,
+                    $res->{appStatInfo}{statItem} || $res->{statItem},
+                );
+    }
+
+    return;
+}
+
+sub nodes {
+    my $self = shift;
+    my $node_id;
+    my $options;
+    if ( @_ == 1 ) {
+        if ( !ref $_[0] ) {
+            $node_id = shift;
+        }
+        else {
+            $options = shift;
+        }
+    }
+    elsif ( @_ > 1 ) {
+        $options = {@_};
+    }
+    my $res = $self->_get(
+                    $node_id ? "cluster/nodes/$node_id"
+                             :  (
+                                    "cluster/nodes",
+                                    { params => $options },
+                                )
+                );
+
+
+    return $self->_apply_host_key(
+                $res,
+                $res->{nodes}{node} || $res->{node} || $res,
+            );
+
+}
+
+sub _apply_host_key {
+    my $self = shift;
+    my $res  = shift;
+    my $rv   = shift;
+
+
+    if (   is_ref( $res )
+        && is_ref( $rv )
+        && ( refaddr $res eq refaddr $rv )
+    ) {
+        return $rv;
+    }
+
+    my $host_key  = $self->host_key;
+    my $this_host = $res->{ $host_key };
+
+    if ( is_hashref $rv ) {
+        $rv->{ $host_key } = $this_host;
+    }
+    elsif ( is_arrayref $rv ) {
+        foreach my $e ( @{ $rv } ) {
+            $e->{ $host_key } = $this_host;
+        }
+    }
+    else {
+        die "Got unknown data: $rv";
+    }
+
+    return $rv;
+}
+
+1;
+
+__END__
+
 =pod
+
+=encoding utf8
+
+=head1 DESCRIPTION
+
+Perl interface to the YARN Resource Manager REST API.
+
+=head1 SYNOPSIS
+
+    my $rm = Net::Hadoop::YARN::ResourceManager->new;
+
+=head1 METHODS
+
+=head2 active_rm
+
+Returns the active RM hostname in the HA-pair.
+
+    my $host_port = $rm->active_rm;
+    my $host      = $rm->active_rm({ hostname_only => 1 });
+
+This function is an extension in the module and not a part of the REST API.
+
+=head2 info
+
+Cluster Information API
+
+=head2 metrics
+
+Cluster Metrics API
+
+=head2 scheduler
+
+Cluster Scheduler API
 
 =head2 apps
 
@@ -208,45 +326,9 @@ applications matching any of the given application tags, specified as a comma-se
 
 =back
 
-=cut
-
-sub apps {
-    my $self = shift;
-    my $app_id;
-    my $options;
-    if ( @_ == 1 ) {
-        if ( !ref $_[0] ) {
-            $app_id = shift;
-        }
-        else {
-            $options = shift;
-        }
-    }
-    elsif ( @_ > 1 ) {
-        $options = {@_};
-    }
-    my $res = $self->_get(
-        $app_id ? "cluster/apps/$app_id" : ( "cluster/apps", { params => $options } )
-    );
-
-    return $self->_apply_host_key(
-                $res,
-                $res->{apps}{app} || $res->{app} || $res,
-            );
-}
-
 =head2 attempts
 
 Cluster Application Attempts API : get attempts details on a specific task
-
-=cut
-
-sub appattempts {
-    my $self = shift;
-    my $app_id = shift or die "No app ID provided";
-    my $res = $self->_get( "cluster/apps/$app_id/appattempts" );
-    return $res;
-}
 
 =head2 appstatistics
 
@@ -270,36 +352,6 @@ temporarily. Otherwise, users will expect an BadRequestException.
 
 =back
 
-=cut
-
-# TODO check all states and add filter (validation)
-
-sub appstatistics {
-    my $self = shift;
-    my $options;
-    if ( @_ == 1 && ref $_[0] ) {
-        $options = shift;
-    }
-    elsif ( @_ > 1 ) {
-        $options = {@_};
-    }
-    my $res = $self->_get(
-                    "cluster/appstatistics",
-                    ( $options ? {
-                        params => $options,
-                    } : () ),
-                );
-
-    if ($res) {
-        return $self->_apply_host_key(
-                    $res,
-                    $res->{appStatInfo}{statItem} || $res->{statItem},
-                );
-    }
-
-    return;
-}
-
 =head2 nodes
 
 Cluster Nodes API & Cluster Node API: can be either for all nodes, or for a
@@ -313,38 +365,6 @@ single one (no options in that case)
 
 =back
 
-=cut
-
-sub nodes {
-    my $self = shift;
-    my $node_id;
-    my $options;
-    if ( @_ == 1 ) {
-        if ( !ref $_[0] ) {
-            $node_id = shift;
-        }
-        else {
-            $options = shift;
-        }
-    }
-    elsif ( @_ > 1 ) {
-        $options = {@_};
-    }
-    my $res = $self->_get(
-                    $node_id ? "cluster/nodes/$node_id"
-                             :  (
-                                    "cluster/nodes",
-                                    { params => $options },
-                                )
-                );
-
-
-    return $self->_apply_host_key(
-                $res,
-                $res->{nodes}{node} || $res->{node} || $res,
-            );
-
-}
 
 =head2 Cluster Writeable APIs
 
@@ -367,38 +387,3 @@ Currently in alpha, not implemented in this class
 L<https://hadoop.apache.org/docs/stable/hadoop-yarn/hadoop-yarn-site/ResourceManagerRest.html>.
 
 =cut
-
-sub _apply_host_key {
-    my $self = shift;
-    my $res  = shift;
-    my $rv   = shift;
-
-
-    if (   is_ref( $res )
-        && is_ref( $rv )
-        && ( refaddr $res eq refaddr $rv )
-    ) {
-        return $rv;
-    }
-
-    my $host_key  = $self->host_key;
-    my $this_host = $res->{ $host_key };
-
-    if ( is_hashref $rv ) {
-        $rv->{ $host_key } = $this_host;
-    }
-    elsif ( is_arrayref $rv ) {
-        foreach my $e ( @{ $rv } ) {
-            $e->{ $host_key } = $this_host;
-        }
-    }
-    else {
-        die "Got unknown data: $rv";
-    }
-
-    return $rv;
-}
-
-1;
-
-__END__
