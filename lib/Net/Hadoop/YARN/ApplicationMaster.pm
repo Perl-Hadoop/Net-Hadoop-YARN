@@ -5,9 +5,35 @@ use warnings;
 use 5.10.0;
 use Moo;
 
+use Clone ();
+use List::MoreUtils qw( uniq );
+
+use Constant::FromGlobal DEBUG => { int => 1, default => 0, env => 1 };
+use HTML::PullParser;
+use Scalar::Util qw( blessed );
+
+use Net::Hadoop::YARN::HistoryServer;
+
 with 'Net::Hadoop::YARN::Roles::AppMasterHistoryServer';
 with 'Net::Hadoop::YARN::Roles::Common';
 
+has '+servers' => (
+    default => sub {["localhost:8088"]},
+);
+
+has history_object => (
+    is  => 'rw',
+    isa => sub {
+        my $o = shift || return;
+        if ( ! blessed $o || ! $o->isa('Net::Hadoop::YARN::HistoryServer') ) {
+            die "$o is not a Net::Hadoop::YARN::HistoryServer";
+        }
+    },
+    lazy    => 1,
+    default => sub { },
+);
+
+my $PREFIX = '_' x 4;
 
 #<<<
 my $methods_urls = {
@@ -31,11 +57,92 @@ my $methods_urls = {
 # - execute the request
 # - return the proper fragment of the JSON tree
 
-_mk_subs($methods_urls);
+_mk_subs($methods_urls, { prefix => $PREFIX } );
 
-has '+servers' => (
-    default => sub {["localhost:8088"]},
+my %app_to_hist = (
+    jobs => [ job => qr{ \A job_[0-9]+ }xms ],
 );
+
+foreach my $name ( keys %{ $methods_urls } ) {
+    my $base = $PREFIX . $name;
+    my $hist_method = $app_to_hist{ $name } || [ $name ];
+    no strict qw( refs );
+    *{ $name } = sub {
+        my $self = shift;
+        my $args = Clone::clone( \@_ );
+        my @rv;
+        eval {
+            @rv = $self->$base( @_ );
+            1;
+        } or do {
+            my $eval_error = $@ || 'Zombie error';
+            if (
+                $eval_error =~ m{ \Qserver response wasn't valid (possibly buggy redirect to HTML instead of JSON or XML\E }xms
+                && $self->history_object
+            ) {
+                if ( DEBUG ) {
+                    printf STDERR "Received HTML from the API. I will now attempt to collect the information from the history server\n";
+                }
+                if ( DEBUG ) {
+                    printf STDERR "%s\n", $eval_error;
+                }
+                eval {
+                    my(undef, $html) = split m{\Q<!DOCTYPE\E}xms, $eval_error, 2;
+                    $html = '<!DOCTYPE' . $html;
+                    my $parser = HTML::PullParser->new(
+                                    doc         => \$html,
+                                    start       => 'event, tagname, @attr',
+                                    report_tags => [qw( a )],
+                                ) || die "Can't parse HTML received from the API: $!";
+                    my %link;
+                    while ( my $token = $parser->get_token ) {
+                        next if $token->[0] ne 'start';
+                        my($type, $tag, %attr) = @{ $token };
+                        my $link = $attr{href} || next;
+                        $link{ $link }++;
+                    }
+                    my %id;
+                    for my $link ( keys %link ) {
+                        $id{ $_ }++ for $self->_extract_valid_params( $link );
+                    }
+                    my @ids = keys %id;
+                    my($hmethod, $hregex) = @{ $hist_method };
+                    my($id) = $hregex ? grep { $_ =~ $hregex } @ids : ();
+                    @rv = $self->history_object->$hmethod( $id );
+                    1;
+                } or do {
+                    my $eval_error_hist = $@ || 'Zombie error';
+                    die "Received HTML from the API and attempting to map that to a historical job failed: $eval_error\n$eval_error_hist\n";
+                };
+            }
+            else {
+                die $eval_error;
+            }
+        };
+        return @rv;
+    };
+}
+
+sub info {
+    my $self = shift;
+    $self->mapreduce(@_);
+}
+
+sub mapreduce {
+    my $self   = shift;
+    my $app_id = shift;
+    my $res    = $self->_get("{appid}/ws/v1/mapreduce/info");
+    return $res->{info};
+}
+
+sub tasks {
+    my $self = shift;
+    $self->_get_tasks(@_);
+}
+
+1;
+
+__END__
 
 =head1 NAME
 
@@ -59,20 +166,6 @@ Mapreduce Application Master Info API
 
 http://<proxy http address:port>/proxy/{appid}/ws/v1/mapreduce/info
 
-=cut
-
-sub info {
-    my $self = shift;
-    $self->mapreduce(@_);
-}
-
-sub mapreduce {
-    my $self   = shift;
-    my $app_id = shift;
-    my $res    = $self->_get("{appid}/ws/v1/mapreduce/info");
-    return $res->{info};
-}
-
 =head2 tasks
 
 Tasks API
@@ -88,10 +181,3 @@ type of task, valid values are m or r.  m for map task or r for reduce task.
 =back
 
 =cut
-
-sub tasks {
-    my $self = shift;
-    $self->_get_tasks(@_);
-}
-
-1;

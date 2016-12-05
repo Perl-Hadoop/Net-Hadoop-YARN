@@ -15,14 +15,35 @@ my %validation_pattern = (
     attemptid => 'attempt_[0-9]+_[0-9]+_[a-z]_[0-9]+_[0-9]+',
 );
 
+my $RE_EXTRACT_VALIDS = sprintf '(?:%s)',
+                                join '|',
+                                    map { $validation_pattern{$_} }
+                                    keys %validation_pattern;
+
 # used by consuming classes, for specific cases
 sub _validate_id {
     my $self = shift;
     return $_[1] =~ /^$validation_pattern{$_[0]}$/;
 }
 
+sub _extract_valid_params {
+    # TODO: this doesn't recognise container or attempt etc ids per above hash
+    #
+    my $self = shift;
+    my $str  = shift || return;
+
+    my @ids;
+    while ( my($type) = $str =~ /$RE_EXTRACT_VALIDS/gc ) {
+        push @ids, $type;
+    }
+
+    return @ids;
+}
+
 sub _mk_subs {
     my $methods_urls = shift;
+    my $opt          = shift || {};
+    my $pfix         = $opt->{prefix} || '';
 
     for my $key ( keys %{$methods_urls} ) {
 
@@ -103,7 +124,7 @@ sub _mk_subs {
             # limit the scope of non-strict-ness
             # insert the method for the endpoint in the using class
             no strict 'refs';
-            *{ ( caller() )[0] . "::$key" } = $new_method;
+            *{ ( caller() )[0] . '::' . $pfix . $key } = $new_method;
         }
     }
 }
