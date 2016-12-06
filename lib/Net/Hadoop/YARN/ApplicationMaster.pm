@@ -121,6 +121,7 @@ sub _collect_from_history {
 
     my @hist_param;
     if ( $error =~ RE_ARCHIVED_ERROR && $name eq 'jobs' ) {
+        print STDERR "Job was archived\n" if DEBUG;
         @hist_param = (
             map {
                 (my $c = $_) =~ s{ \bapplication_ }{job_}xms;
@@ -129,6 +130,7 @@ sub _collect_from_history {
         );
     }
     else {
+        print STDERR "Job was not available from he RM\n" if DEBUG;
         @hist_param = (
             $hregex
                 ? grep { $_ =~ $hregex }
