@@ -81,39 +81,56 @@ foreach my $name ( keys %{ $methods_urls } ) {
                 && $self->history_object
             ) {
                 if ( DEBUG ) {
-                    printf STDERR "Received HTML from the API. I will now attempt to collect the information from the history server\n";
+                    printf STDERR "Received HTML from the API. ",
+                                  "I will now attempt to collect the information from the history server\n";
+                    printf STDERR "The error was: %s\n", $eval_error
+                        if DEBUG > 1;
                 }
-                if ( DEBUG ) {
-                    printf STDERR "%s\n", $eval_error;
-                }
-                eval {
-                    my(undef, $html) = split m{\Q<!DOCTYPE\E}xms, $eval_error, 2;
-                    $html = '<!DOCTYPE' . $html;
-                    my $parser = HTML::PullParser->new(
-                                    doc         => \$html,
-                                    start       => 'event, tagname, @attr',
-                                    report_tags => [qw( a )],
-                                ) || die "Can't parse HTML received from the API: $!";
-                    my %link;
-                    while ( my $token = $parser->get_token ) {
-                        next if $token->[0] ne 'start';
-                        my($type, $tag, %attr) = @{ $token };
-                        my $link = $attr{href} || next;
-                        $link{ $link }++;
-                    }
-                    my %id;
-                    for my $link ( keys %link ) {
-                        $id{ $_ }++ for $self->_extract_valid_params( $link );
-                    }
-                    my @ids = keys %id;
+
+                my $really_gone = $eval_error =~ m{
+                    Application .+? \Qcould not be found, please try the history server\E
+                }xms;
+
+                if ( $really_gone ) {
+                    my @orig =  @{ $args };
                     my($hmethod, $hregex) = @{ $hist_method };
-                    my($id) = $hregex ? grep { $_ =~ $hregex } @ids : ();
-                    @rv = $self->history_object->$hmethod( $id );
-                    1;
-                } or do {
-                    my $eval_error_hist = $@ || 'Zombie error';
-                    die "Received HTML from the API and attempting to map that to a historical job failed: $eval_error\n$eval_error_hist\n";
-                };
+                    @rv = $self->history_object->$hmethod(
+                                map {
+                                    (my $c = $_) =~ s{ \bapplication_ }{job_}xms;
+                                    $c;
+                                } @orig
+                            );
+                }
+                else {
+                    eval {
+                        my(undef, $html) = split m{\Q<!DOCTYPE\E}xms, $eval_error, 2;
+                        $html = '<!DOCTYPE' . $html;
+                        my $parser = HTML::PullParser->new(
+                                        doc         => \$html,
+                                        start       => 'event, tagname, @attr',
+                                        report_tags => [qw( a )],
+                                    ) || die "Can't parse HTML received from the API: $!";
+                        my %link;
+                        while ( my $token = $parser->get_token ) {
+                            next if $token->[0] ne 'start';
+                            my($type, $tag, %attr) = @{ $token };
+                            my $link = $attr{href} || next;
+                            $link{ $link }++;
+                        }
+                        my %id;
+                        for my $link ( keys %link ) {
+                            $id{ $_ }++ for $self->_extract_valid_params( $link );
+                        }
+                        my @ids = keys %id;
+                        my($hmethod, $hregex) = @{ $hist_method };
+                        my($id) = $hregex ? grep { $_ =~ $hregex } @ids : ();
+                        @rv = $self->history_object->$hmethod( $id );
+                        1;
+                    } or do {
+                        my $eval_error_hist = $@ || 'Zombie error';
+                        die "Received HTML from the API and attempting to map that to a historical job failed: $eval_error\n$eval_error_hist\n";
+                    };
+                }
             }
             else {
                 die $eval_error;
