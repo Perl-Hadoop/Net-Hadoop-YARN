@@ -3,14 +3,22 @@ package Net::Hadoop::YARN::ApplicationMaster;
 use strict;
 use warnings;
 use 5.10.0;
-use Moo;
 
-use Clone ();
-use List::MoreUtils qw( uniq );
+use constant {
+    RE_ARCHIVED_ERROR => qr{
+        Application .+?
+        \Qcould not be found, please try the history server\E
+    }xms,
+    RE_HTML_ERROR => qr{
+        \Qserver response wasn't valid (possibly buggy redirect to HTML instead of JSON or XML\E
+    }xms,
+};
 
+use Clone        ();
 use Constant::FromGlobal DEBUG => { int => 1, default => 0, env => 1 };
-use HTML::PullParser;
-use Scalar::Util qw( blessed );
+use Moo;
+use Ref::Util    ();
+use Scalar::Util ();
 
 use Net::Hadoop::YARN::HistoryServer;
 
@@ -24,8 +32,10 @@ has '+servers' => (
 has history_object => (
     is  => 'rw',
     isa => sub {
-        my $o = shift || return;
-        if ( ! blessed $o || ! $o->isa('Net::Hadoop::YARN::HistoryServer') ) {
+        my $o = shift || return; # this is optional
+        if (   ! Scalar::Util::blessed $o
+            || ! $o->isa('Net::Hadoop::YARN::HistoryServer')
+        ) {
             die "$o is not a Net::Hadoop::YARN::HistoryServer";
         }
     },
@@ -71,73 +81,96 @@ foreach my $name ( keys %{ $methods_urls } ) {
         my $self = shift;
         my $args = Clone::clone( \@_ );
         my @rv;
+
         eval {
             @rv = $self->$base( @_ );
             1;
         } or do {
             my $eval_error = $@ || 'Zombie error';
-            if (
-                $eval_error =~ m{ \Qserver response wasn't valid (possibly buggy redirect to HTML instead of JSON or XML\E }xms
-                && $self->history_object
-            ) {
-                if ( DEBUG ) {
-                    printf STDERR "Received HTML from the API. ",
-                                  "I will now attempt to collect the information from the history server\n";
-                    printf STDERR "The error was: %s\n", $eval_error
-                        if DEBUG > 1;
-                }
-
-                my $really_gone = $eval_error =~ m{
-                    Application .+? \Qcould not be found, please try the history server\E
-                }xms;
-
-                if ( $really_gone ) {
-                    my @orig =  @{ $args };
-                    my($hmethod, $hregex) = @{ $hist_method };
-                    @rv = $self->history_object->$hmethod(
-                                map {
-                                    (my $c = $_) =~ s{ \bapplication_ }{job_}xms;
-                                    $c;
-                                } @orig
-                            );
-                }
-                else {
-                    eval {
-                        my(undef, $html) = split m{\Q<!DOCTYPE\E}xms, $eval_error, 2;
-                        $html = '<!DOCTYPE' . $html;
-                        my $parser = HTML::PullParser->new(
-                                        doc         => \$html,
-                                        start       => 'event, tagname, @attr',
-                                        report_tags => [qw( a )],
-                                    ) || die "Can't parse HTML received from the API: $!";
-                        my %link;
-                        while ( my $token = $parser->get_token ) {
-                            next if $token->[0] ne 'start';
-                            my($type, $tag, %attr) = @{ $token };
-                            my $link = $attr{href} || next;
-                            $link{ $link }++;
-                        }
-                        my %id;
-                        for my $link ( keys %link ) {
-                            $id{ $_ }++ for $self->_extract_valid_params( $link );
-                        }
-                        my @ids = keys %id;
-                        my($hmethod, $hregex) = @{ $hist_method };
-                        my($id) = $hregex ? grep { $_ =~ $hregex } @ids : ();
-                        @rv = $self->history_object->$hmethod( $id );
-                        1;
-                    } or do {
-                        my $eval_error_hist = $@ || 'Zombie error';
-                        die "Received HTML from the API and attempting to map that to a historical job failed: $eval_error\n$eval_error_hist\n";
-                    };
-                }
+            if ( $eval_error =~ RE_HTML_ERROR && $self->history_object ) {
+                @rv = $self->_collect_from_history(
+                            $args,
+                            $hist_method,
+                            $eval_error,
+                        );
             }
             else {
                 die $eval_error;
             }
         };
+
         return @rv;
     };
+}
+
+sub _collect_from_history {
+    my $self        = shift;
+    my $args        = shift;
+    my $hist_method = shift;
+    my $error       = shift || die "No error message specified!";
+
+    if ( DEBUG ) {
+        print STDERR "Received HTML from the API. ",
+                      "I will now attempt to collect the information from the history server\n";
+        printf STDERR "The error was: %s\n", $error
+            if DEBUG > 1;
+    }
+
+    my @rv;
+    if ( $error =~ RE_ARCHIVED_ERROR ) {
+        my @orig =  @{ $args };
+        my($hmethod, $hregex) = @{ $hist_method };
+        @rv = $self->history_object->$hmethod(
+                    map {
+                        (my $c = $_) =~ s{ \bapplication_ }{job_}xms;
+                        $c;
+                    } @orig
+                );
+    }
+    else {
+        eval {
+            my @ids = $self->_extract_ids_from_error_html( $error );
+            my($hmethod, $hregex) = @{ $hist_method };
+            my($id) = $hregex ? grep { $_ =~ $hregex } @ids : ();
+            @rv = $self->history_object->$hmethod( $id );
+            1;
+        } or do {
+            my $eval_error_hist = $@ || 'Zombie error';
+            die "Received HTML from the API and attempting to map that to a historical job failed: $error\n$eval_error_hist\n";
+        };
+    }
+
+    foreach my $thing ( @rv ) {
+        next if ! Ref::Util::is_hashref $thing;
+        $thing->{__from_history} = 1;
+    }
+
+    return @rv;
+}
+
+sub _extract_ids_from_error_html {
+    require HTML::PullParser;
+    my $self  = shift;
+    my $error = shift || die "No error message specified!";
+    my(undef, $html) = split m{\Q<!DOCTYPE\E}xms, $error, 2;
+    $html = '<!DOCTYPE' . $html;
+    my $parser = HTML::PullParser->new(
+                    doc         => \$html,
+                    start       => 'event, tagname, @attr',
+                    report_tags => [qw( a )],
+                ) || die "Can't parse HTML received from the API: $!";
+    my %link;
+    while ( my $token = $parser->get_token ) {
+        next if $token->[0] ne 'start';
+        my($type, $tag, %attr) = @{ $token };
+        my $link = $attr{href} || next;
+        $link{ $link }++;
+    }
+    my %id;
+    for my $link ( keys %link ) {
+        $id{ $_ }++ for $self->_extract_valid_params( $link );
+    }
+    return keys %id;
 }
 
 sub info {
