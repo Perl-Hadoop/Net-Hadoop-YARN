@@ -14,6 +14,7 @@ use constant {
     }xms,
 };
 
+use Carp         ();
 use Clone        ();
 use Constant::FromGlobal DEBUG => { int => 1, default => 0, env => 1 };
 use Moo;
@@ -36,7 +37,7 @@ has history_object => (
         if (   ! Scalar::Util::blessed $o
             || ! $o->isa('Net::Hadoop::YARN::HistoryServer')
         ) {
-            die "$o is not a Net::Hadoop::YARN::HistoryServer";
+            Carp::confess "$o is not a Net::Hadoop::YARN::HistoryServer";
         }
     },
     lazy    => 1,
@@ -75,7 +76,6 @@ my %app_to_hist = (
 
 foreach my $name ( keys %{ $methods_urls } ) {
     my $base = $PREFIX . $name;
-    my $hist_method = $app_to_hist{ $name } || [ $name ];
     no strict qw( refs );
     *{ $name } = sub {
         my $self = shift;
@@ -90,12 +90,12 @@ foreach my $name ( keys %{ $methods_urls } ) {
             if ( $eval_error =~ RE_HTML_ERROR && $self->history_object ) {
                 @rv = $self->_collect_from_history(
                             $args,
-                            $hist_method,
+                            $name,
                             $eval_error,
                         );
             }
             else {
-                die $eval_error;
+                Carp::confess $eval_error;
             }
         };
 
@@ -104,10 +104,13 @@ foreach my $name ( keys %{ $methods_urls } ) {
 }
 
 sub _collect_from_history {
-    my $self        = shift;
-    my $args        = shift;
-    my $hist_method = shift;
-    my $error       = shift || die "No error message specified!";
+    my $self  = shift;
+    my $args  = shift;
+    my $name  = shift;
+    my $error = shift || Carp::confess "No error message specified!";
+
+    my $hist_method = $app_to_hist{ $name } || [ $name ];
+    my($hmethod, $hregex) = @{ $hist_method };
 
     if ( DEBUG ) {
         print STDERR "Received HTML from the API. ",
@@ -116,29 +119,32 @@ sub _collect_from_history {
             if DEBUG > 1;
     }
 
-    my @rv;
-    if ( $error =~ RE_ARCHIVED_ERROR ) {
-        my @orig =  @{ $args };
-        my($hmethod, $hregex) = @{ $hist_method };
-        @rv = $self->history_object->$hmethod(
-                    map {
-                        (my $c = $_) =~ s{ \bapplication_ }{job_}xms;
-                        $c;
-                    } @orig
-                );
+    my @hist_param;
+    if ( $error =~ RE_ARCHIVED_ERROR && $name eq 'jobs' ) {
+        @hist_param = (
+            map {
+                (my $c = $_) =~ s{ \bapplication_ }{job_}xms;
+                $c;
+            } @{ $args }
+        );
     }
     else {
-        eval {
-            my @ids = $self->_extract_ids_from_error_html( $error );
-            my($hmethod, $hregex) = @{ $hist_method };
-            my($id) = $hregex ? grep { $_ =~ $hregex } @ids : ();
-            @rv = $self->history_object->$hmethod( $id );
-            1;
-        } or do {
-            my $eval_error_hist = $@ || 'Zombie error';
-            die "Received HTML from the API and attempting to map that to a historical job failed: $error\n$eval_error_hist\n";
-        };
+        @hist_param = (
+            $hregex
+                ? grep { $_ =~ $hregex }
+                    $self->_extract_ids_from_error_html( $error )
+                : ()
+        );
     }
+
+    my @rv;
+    eval {
+        @rv = $self->history_object->$hmethod( @hist_param );
+        1;
+    } or do {
+        my $eval_error_hist = $@ || 'Zombie error';
+        Carp::confess "Received HTML from the API and attempting to map that to a historical job failed: $error\n$eval_error_hist\n";
+    };
 
     foreach my $thing ( @rv ) {
         next if ! Ref::Util::is_hashref $thing;
@@ -151,14 +157,14 @@ sub _collect_from_history {
 sub _extract_ids_from_error_html {
     require HTML::PullParser;
     my $self  = shift;
-    my $error = shift || die "No error message specified!";
+    my $error = shift || Carp::confess "No error message specified!";
     my(undef, $html) = split m{\Q<!DOCTYPE\E}xms, $error, 2;
     $html = '<!DOCTYPE' . $html;
     my $parser = HTML::PullParser->new(
                     doc         => \$html,
                     start       => 'event, tagname, @attr',
                     report_tags => [qw( a )],
-                ) || die "Can't parse HTML received from the API: $!";
+                ) || Carp::confess "Can't parse HTML received from the API: $!";
     my %link;
     while ( my $token = $parser->get_token ) {
         next if $token->[0] ne 'start';
