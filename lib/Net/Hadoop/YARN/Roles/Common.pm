@@ -154,7 +154,8 @@ sub _request {
     my @servers  = $server ? ( $server ) : @{ $self->servers };
     my $maxtries = @servers;
 
-    my ($eval_error, $ret, $n);
+    my ($eval_error, $ret);
+    my $n = 0;
 
     # get a copy, don't mess with the global setting
     #
@@ -163,7 +164,7 @@ sub _request {
 
     my $e_non_html = "Response doesn't look like XML: ";
 
-    TRY: for ( 1 .. $maxtries ) {
+    TRY: while ( $n < $maxtries ) {
         my $redo;
 
         $n++;
@@ -254,6 +255,12 @@ sub _request {
                     }
                     $decode_error = 'Decoded error: ' . join q{ }, @txt_error;
                 };
+
+                my $will_fail_again = $decode_error =~ m{
+                    \Qcould not be found, please try the history server\E
+                }xms;
+
+                $n = $maxtries if $will_fail_again;
 
                 # when redirected to the history server, a bug present in hadoop 2.5.1
                 # sends to an HTML page, ignoring the Accept-Type header
