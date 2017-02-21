@@ -9,10 +9,12 @@ use Moo::Role;
 use Data::Dumper;
 use HTTP::Request;
 use JSON::XS;
+use HTML::PullParser;
 use LWP::UserAgent;
 use Regexp::Common qw( net );
 use Scalar::Util   qw( blessed );
 use Socket;
+use Text::Trim qw( trim );
 use URI;
 use XML::LibXML::Simple;
 
@@ -159,6 +161,8 @@ sub _request {
     my @banned_servers;
     my $selected_server;
 
+    my $e_non_html = "Response doesn't look like XML: ";
+
     TRY: for ( 1 .. $maxtries ) {
         my $redo;
 
@@ -213,7 +217,7 @@ sub _request {
                         $redo++;
                         die "Hit the standby with $selected_server";
                     }
-                    die "Response doesn't look like XML: $content";
+                    die $e_non_html . $content;
                 }
 
                 $res = XMLin(
@@ -233,8 +237,23 @@ sub _request {
                 ) || die "Failed to parse XML!";
                 1;
             } or do {
-                # $self->_json->decode($content)
+                my $is_html = $response->content_type eq 'text/html';
                 my $decode_error = $@ || 'Zombie error';
+
+                if ( $is_html ) {
+                    (my $str_to_parse = $decode_error) =~ s{ \Q$e_non_html\E }{}xms;
+                    my $parser = HTML::PullParser->new(
+                                    doc  => \$str_to_parse,
+                                    text => 'dtext',
+                                ) || Carp::confess "Can't parse HTML received from the API: $!";
+                    my %link;
+                    my @txt_error;
+                    while ( my $token = $parser->get_token ) {
+                        my $txt = trim $token->[0] or next;
+                        push @txt_error, $txt;
+                    }
+                    $decode_error = 'Decoded error: ' . join q{ }, @txt_error;
+                };
 
                 # when redirected to the history server, a bug present in hadoop 2.5.1
                 # sends to an HTML page, ignoring the Accept-Type header

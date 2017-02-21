@@ -14,9 +14,11 @@ use constant {
     }xms,
 };
 
+use Constant::FromGlobal DEBUG => { int => 1, default => 0, env => 1 };
+
 use Carp         ();
 use Clone        ();
-use Constant::FromGlobal DEBUG => { int => 1, default => 0, env => 1 };
+use HTML::PullParser;
 use Moo;
 use Ref::Util    ();
 use Scalar::Util ();
@@ -157,7 +159,6 @@ sub _collect_from_history {
 }
 
 sub _extract_ids_from_error_html {
-    require HTML::PullParser;
     my $self  = shift;
     my $error = shift || Carp::confess "No error message specified!";
     my(undef, $html) = split m{\Q<!DOCTYPE\E}xms, $error, 2;
