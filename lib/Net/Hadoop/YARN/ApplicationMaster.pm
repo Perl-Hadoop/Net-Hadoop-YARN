@@ -9,9 +9,6 @@ use constant {
         Application .+?
         \Qcould not be found, please try the history server\E
     }xms,
-    RE_HTML_ERROR => qr{
-        \Qserver response wasn't valid (possibly buggy redirect to HTML instead of JSON or XML\E
-    }xms,
 };
 
 use Constant::FromGlobal DEBUG => { int => 1, default => 0, env => 1 };
@@ -89,7 +86,7 @@ foreach my $name ( keys %{ $methods_urls } ) {
             1;
         } or do {
             my $eval_error = $@ || 'Zombie error';
-            if ( $eval_error =~ RE_HTML_ERROR && $self->history_object ) {
+            if ( $eval_error =~ RE_ARCHIVED_ERROR && $self->history_object ) {
                 @rv = $self->_collect_from_history(
                             $args,
                             $name,
@@ -101,7 +98,7 @@ foreach my $name ( keys %{ $methods_urls } ) {
             }
         };
 
-        return @rv;
+        return wantarray ? @rv : $rv[0];
     };
 }
 
@@ -122,7 +119,7 @@ sub _collect_from_history {
     }
 
     my @hist_param;
-    if ( $error =~ RE_ARCHIVED_ERROR && $name eq 'jobs' ) {
+    if ( $error =~ RE_ARCHIVED_ERROR && ( $name eq 'jobs' || $name eq 'job' ) ) {
         print STDERR "Job was archived\n" if DEBUG;
         @hist_param = (
             map {
