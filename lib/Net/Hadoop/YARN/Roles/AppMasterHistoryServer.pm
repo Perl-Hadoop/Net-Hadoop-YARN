@@ -4,9 +4,9 @@ use strict;
 use warnings;
 use 5.10.0;
 
-use Moo::Role;
-
+use Carp qw( croak );
 use Hash::Path;
+use Moo::Role;
 
 my %validation_pattern = (
     appid     => 'application_[0-9]+_[0-9]+',
@@ -86,7 +86,7 @@ sub _mk_subs {
                                             }
                                          : $key
                                          ;
-                                die sprintf "No validator for `%s` [%s]. Be sure that `%s` is a valid API endpoint for this object",
+                                croak sprintf "No validator for `%s` [%s]. Be sure that `%s` is a valid API endpoint for this object",
                                                     $param,
                                                     $params_idx,
                                                     $what,
@@ -94,7 +94,7 @@ sub _mk_subs {
                                 };
 
                 if ( ! ref $param && ! $v->{validate}->( $param ) ) {
-                    die sprintf "Param `%s` doesn't satisfy pattern /%s/ in call to `%s`.",
+                    croak sprintf "Param `%s` doesn't satisfy pattern /%s/ in call to `%s`.",
                                     $param || '',
                                     $validation_pattern{  $v->{name}  },
                                     $key,
