@@ -236,4 +236,24 @@ type of task, valid values are m or r.  m for map task or r for reduce task.
 
 =back
 
+=head2 job
+
+=head2 jobattempts
+
+=head2 jobconf
+
+=head2 jobcounters
+
+=head2 jobs
+
+=head2 task
+
+=head2 taskattempt
+
+=head2 taskattemptcounters
+
+=head2 taskattempts
+
+=head2 taskcounters
+
 =cut
