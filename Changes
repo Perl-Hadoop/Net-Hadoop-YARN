@@ -1,6 +1,7 @@
 Revision history for Net-Hadoop-YARN
 
 {{$NEXT}}
+    - Expand automatic history collection
 
 0.202 2016-11-08 BURAK
     - Patch for the CDH5.8.2 RM redirect bugfix.
