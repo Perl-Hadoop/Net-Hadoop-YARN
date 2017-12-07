@@ -14,6 +14,7 @@ use LWP::UserAgent;
 use Regexp::Common qw( net );
 use Scalar::Util   qw( blessed );
 use Socket;
+use Carp;
 use Text::Trim qw( trim );
 use URI;
 use XML::LibXML::Simple;
@@ -199,6 +200,13 @@ sub _request {
 
             if ( $response->code == 500 ) {
                 die "Bad request: $uri";
+            } elsif ( $response->code == 401 ) {
+                my $extramsg = ( $response->headers->{'www-authenticate'} || '' ) eq 'Negotiate'
+                    ? eval { require LWP::Authen::Negotiate; 1; }
+                        ? q{ (Did you forget to run kinit?) }
+                        : q{ (LWP::Authen::Negotiate doesn't seem available) }
+                    : '';
+                croak "SecurityError$extramsg";
             }
 
             # found out the json support is buggy at least in the scheduler
