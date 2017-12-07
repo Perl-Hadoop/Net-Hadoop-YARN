@@ -207,7 +207,7 @@ sub _request {
                         : q{ (LWP::Authen::Negotiate doesn't seem available) }
                     : '';
                 croak "SecurityError$extramsg";
-}
+            }
 
             # found out the json support is buggy at least in the scheduler
             # info (overwrites child queues instead of making a list), revert
