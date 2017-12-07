@@ -276,6 +276,15 @@ JMX helpers for YARN endpoints.
 
     -
 
+=head1 ACCESSORS
+
+=head3 target_host
+
+=head3 target_host_port
+
+=head3 target_port
+
+
 =head1 METHODS
 
 =head2 all_available_stats
