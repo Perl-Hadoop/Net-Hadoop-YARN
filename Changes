@@ -1,6 +1,8 @@
 Revision history for Net-Hadoop-YARN
 
 {{$NEXT}}
+
+0.203 2017-12-07 BURAK
     - Expand automatic history collection
     - Kerberos support (ciranor).
 
